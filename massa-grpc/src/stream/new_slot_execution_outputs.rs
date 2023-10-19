@@ -6,12 +6,16 @@ use crate::server::MassaPublicGrpc;
 use crate::SlotRange;
 use futures_util::StreamExt;
 use massa_execution_exports::{ExecutionOutput, SlotExecutionOutput};
+use massa_ledger_exports::SetUpdateOrDelete;
+use massa_models::address::Address;
+use massa_models::operation::OperationId;
 use massa_models::slot::Slot;
 use massa_proto_rs::massa::api::v1::{self as grpc_api, NewSlotExecutionOutputsRequest};
 use massa_proto_rs::massa::model::v1::{self as grpc_model};
 use std::collections::HashSet;
 use std::io::ErrorKind;
 use std::pin::Pin;
+use std::str::FromStr;
 use tokio::select;
 use tonic::{Request, Streaming};
 use tracing::log::{error, warn};
@@ -26,7 +30,6 @@ pub type NewSlotExecutionOutputsStreamType = Pin<
     >,
 >;
 
-//TODO implement remaining sub filters
 // Type declaration for NewSlotExecutionOutputsFilter
 #[derive(Clone, Debug, Default)]
 struct Filter {
@@ -50,6 +53,17 @@ struct Filter {
 struct AsyncPoolChangesFilter {
     // Do not return any message
     none: Option<()>,
+    // The types of the change
+    change_types: Option<HashSet<i32>>,
+    // The handlers functions names within the destination address bytecode
+    handlers: Option<HashSet<String>>,
+    // The addresses towards which the message is being sent
+    destination_addresses: Option<HashSet<Address>>,
+    // The addresses that sent the message
+    emitter_addresses: Option<HashSet<Address>>,
+    // Boolean that determine if the message can be executed. For messages without filter this boolean is always true.
+    // For messages with filter, this boolean is true if the filter has been matched between `validity_start` and current slot.
+    can_be_executed: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -62,18 +76,30 @@ struct ExecutedDenounciationFilter {
 struct ExecutionEventFilter {
     // Do not return any message
     none: Option<()>,
+    // Caller addresses
+    caller_addresses: Option<HashSet<Address>>,
+    // Emitter addresses
+    emitter_addresses: Option<HashSet<Address>>,
+    // Original operation ids
+    original_operation_ids: Option<HashSet<OperationId>>,
+    // Whether the event is a failure
+    is_failure: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default)]
 struct ExecutedOpsChangesFilter {
     // Do not return any message
     none: Option<()>,
+    // Operation ids
+    operation_ids: Option<HashSet<OperationId>>,
 }
 
 #[derive(Clone, Debug, Default)]
 struct LedgerChangesFilter {
     // Do not return any message
     none: Option<()>,
+    // Addresses for which we have ledger changes
+    addresses: Option<HashSet<Address>>,
 }
 
 /// Creates a new stream of new produced and received slot execution outputs
@@ -100,7 +126,10 @@ pub(crate) async fn new_slot_execution_outputs(
                     error!("failed to get filter: {}", err);
                     // Send the error response back to the client
                     if let Err(e) = tx.send(Err(err.into())).await {
-                        error!("failed to send back NewBlocks error response: {}", e);
+                        error!(
+                            "failed to send back NewSlotExecutionOutputs error response: {}",
+                            e
+                        );
                     }
                     return;
                 }
@@ -240,75 +269,88 @@ fn get_filter(
                 },
                 grpc_api::new_slot_execution_outputs_filter::Filter::AsyncPoolChangesFilter(filter) => {
                     if let Some(filter) = filter.filter {
+                        let nested_filter = async_pool_changes_filter.get_or_insert(AsyncPoolChangesFilter::default());
                         match filter {
                             grpc_api::async_pool_changes_filter::Filter::None(_) => {
-                                async_pool_changes_filter = Some(AsyncPoolChangesFilter {
-                                    none: Some(()),
-                                });
+                                nested_filter.none = Some(());
                             },
-                            _ => {
-                                async_pool_changes_filter = Some(AsyncPoolChangesFilter {
-                                none: None,
-                            })
-                        }
+                            grpc_api::async_pool_changes_filter::Filter::Type(change_type) => {
+                                nested_filter.change_types.get_or_insert_with(HashSet::new).insert(change_type);
+                            },
+                            grpc_api::async_pool_changes_filter::Filter::Handler(function) => {
+                                nested_filter.handlers.get_or_insert_with(HashSet::new).insert(function);
+                            },
+                            grpc_api::async_pool_changes_filter::Filter::DestinationAddress(addr) => {
+                                nested_filter.destination_addresses.get_or_insert_with(HashSet::new).insert(Address::from_str(&addr)?);
+                            },
+                            grpc_api::async_pool_changes_filter::Filter::EmitterAddress(addr) => {
+                                nested_filter.emitter_addresses.get_or_insert_with(HashSet::new).insert(Address::from_str(&addr)?);
+                            },
+                            grpc_api::async_pool_changes_filter::Filter::CanBeExecuted(can_be_executed) => {
+                                nested_filter.can_be_executed = Some(can_be_executed);
+                            },
+                        };
                     }
-                }
-            },
+                },
                 grpc_api::new_slot_execution_outputs_filter::Filter::ExecutedDenounciationFilter(filter) => {
                     if let Some(filter) = filter.filter {
+                        let mut nested_filter = ExecutedDenounciationFilter::default();
                         match filter {
                             grpc_api::executed_denounciation_filter::Filter::None(_) => {
-                                executed_denounciation_filter = Some(ExecutedDenounciationFilter {
-                                    none: Some(()),
-                                });
+                                nested_filter.none = Some(());
                             },
+                        }
+                        executed_denounciation_filter = Some(nested_filter);
                     }
-                }},
+                },
                 grpc_api::new_slot_execution_outputs_filter::Filter::EventFilter(filter) => {
                     if let Some(filter) = filter.filter {
+                        let nested_filter = execution_event_filter.get_or_insert(ExecutionEventFilter::default());
                         match filter {
                             grpc_api::execution_event_filter::Filter::None(_) => {
-                                execution_event_filter = Some(ExecutionEventFilter {
-                                    none: Some(()),
-                                });
+                                nested_filter.none = Some(());
                             },
-                            _ => {
-                                execution_event_filter = Some(ExecutionEventFilter {
-                                none: None,
-                            })
-                        }
-                }
-                }},
+                            grpc_api::execution_event_filter::Filter::CallerAddress(addr) => {
+                                nested_filter.caller_addresses.get_or_insert_with(HashSet::new).insert(Address::from_str(&addr)?);
+                            },
+                            grpc_api::execution_event_filter::Filter::EmitterAddress(addr) => {
+                                nested_filter.emitter_addresses.get_or_insert_with(HashSet::new).insert(Address::from_str(&addr)?);
+                            },
+                            grpc_api::execution_event_filter::Filter::OriginalOperationId(op_id) => {
+                                nested_filter.original_operation_ids.get_or_insert_with(HashSet::new).insert(OperationId::from_str(&op_id)?);
+                            },
+                            grpc_api::execution_event_filter::Filter::IsFailure(is_failure) => {
+                                nested_filter.is_failure = Some(is_failure);
+                            },
+                        };
+                    }
+                },
                 grpc_api::new_slot_execution_outputs_filter::Filter::ExecutedOpsChangesFilter(filter) => {
                     if let Some(filter) = filter.filter {
+                        let nested_filter = executed_ops_changes_filter.get_or_insert(ExecutedOpsChangesFilter::default());
                         match filter {
                             grpc_api::executed_ops_changes_filter::Filter::None(_) => {
-                                executed_ops_changes_filter = Some(ExecutedOpsChangesFilter {
-                                    none: Some(()),
-                                });
+                                nested_filter.none = Some(());
                             },
-                            _ => {
-                                executed_ops_changes_filter = Some(ExecutedOpsChangesFilter {
-                                none: None,
-                            })
+                            grpc_api::executed_ops_changes_filter::Filter::OperationId(op_id) => {
+                                nested_filter.operation_ids.get_or_insert_with(HashSet::new).insert(OperationId::from_str(&op_id)?);
+                            },
                         }
-                }
-                }},
+                    }
+                },
                 grpc_api::new_slot_execution_outputs_filter::Filter::LedgerChangesFilter(filter) => {
                     if let Some(filter) = filter.filter {
+                        let nested_filter = ledger_changes_filter.get_or_insert(LedgerChangesFilter::default());
                         match filter {
                             grpc_api::ledger_changes_filter::Filter::None(_) => {
-                                ledger_changes_filter = Some(LedgerChangesFilter {
-                                    none: Some(()),
-                                });
+                                nested_filter.none = Some(());
                             },
-                            _ => {
-                                ledger_changes_filter = Some(LedgerChangesFilter {
-                                none: None,
-                            })
+                            grpc_api::ledger_changes_filter::Filter::Address(addr) => {
+                                nested_filter.addresses.get_or_insert_with(HashSet::new).insert(Address::from_str(&addr)?);
+                            },
                         }
-                }
-                }},
+                    }
+                },
             }
         }
     }
@@ -400,14 +442,173 @@ fn filter_map_exec_output(
     if let Some(execution_event_filter) = &filters.execution_event_filter {
         if execution_event_filter.none.is_some() {
             exec_output.events.clear();
+        } else {
+            exec_output.events.0.retain(|event| {
+                if let Some(is_failure) = execution_event_filter.is_failure {
+                    if event.context.is_error != is_failure {
+                        return false;
+                    }
+                }
+
+                if let Some(original_operation_ids) =
+                    execution_event_filter.original_operation_ids.clone()
+                {
+                    if let Some(origin_operation_id) = event.context.origin_operation_id {
+                        if !original_operation_ids.contains(&origin_operation_id) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                if let Some(caller_addresses) = execution_event_filter.caller_addresses.clone() {
+                    if !caller_addresses
+                        .into_iter()
+                        .any(|caller_address| event.context.call_stack.contains(&caller_address))
+                    {
+                        return false;
+                    };
+                }
+                //TODO to be confirmed
+                if let Some(emitter_addresses) = execution_event_filter.emitter_addresses.clone() {
+                    if !emitter_addresses
+                        .into_iter()
+                        .any(|emitter_address| event.context.call_stack.contains(&emitter_address))
+                    {
+                        return false;
+                    };
+                }
+
+                true
+            });
+
+            if exec_output.events.0.is_empty() {
+                return None;
+            }
         }
     }
 
     if let Some(async_pool_changes_filter) = &filters.async_pool_changes_filter {
         if async_pool_changes_filter.none.is_some() {
             exec_output.state_changes.async_pool_changes.0.clear();
+        } else {
+            exec_output
+                .state_changes
+                .async_pool_changes
+                .0
+                .retain(|_, change| {
+                    match change {
+                        SetUpdateOrDelete::Set(value) => {
+                            if let Some(change_types) = &async_pool_changes_filter.change_types {
+                                if !change_types
+                                    .contains(&(grpc_model::AsyncPoolChangeType::Set as i32))
+                                {
+                                    return false;
+                                }
+                            }
+                            //TODO to be confirmed
+                            if let Some(handlers) = &async_pool_changes_filter.handlers {
+                                if !handlers.contains(&value.function) {
+                                    return false;
+                                }
+                            }
+                            if let Some(destination_addresses) =
+                                &async_pool_changes_filter.destination_addresses
+                            {
+                                if !destination_addresses.contains(&value.destination) {
+                                    return false;
+                                }
+                            }
+
+                            if let Some(emitter_addresses) =
+                                &async_pool_changes_filter.emitter_addresses
+                            {
+                                if !emitter_addresses.contains(&value.sender) {
+                                    return false;
+                                }
+                            }
+
+                            if let Some(can_be_executed) = async_pool_changes_filter.can_be_executed
+                            {
+                                if value.can_be_executed != can_be_executed {
+                                    return false;
+                                }
+                            }
+                        }
+                        SetUpdateOrDelete::Update(value) => {
+                            if let Some(change_types) = &async_pool_changes_filter.change_types {
+                                if !change_types
+                                    .contains(&(grpc_model::AsyncPoolChangeType::Set as i32))
+                                {
+                                    return false;
+                                }
+                            }
+                            //TODO to be confirmed
+                            if let Some(handlers) = &async_pool_changes_filter.handlers {
+                                match value.function.clone() {
+                                    massa_ledger_exports::SetOrKeep::Set(function_name) => {
+                                        if !handlers.contains(&function_name) {
+                                            return false;
+                                        }
+                                    }
+                                    //TODO to be confirmed
+                                    massa_ledger_exports::SetOrKeep::Keep => {
+                                        return false;
+                                    }
+                                }
+                            }
+
+                            if let Some(destination_addresses) =
+                                &async_pool_changes_filter.destination_addresses
+                            {
+                                match value.destination {
+                                    massa_ledger_exports::SetOrKeep::Set(addr) => {
+                                        if !destination_addresses.contains(&addr) {
+                                            return false;
+                                        }
+                                    }
+                                    massa_ledger_exports::SetOrKeep::Keep => {}
+                                }
+                            }
+
+                            if let Some(emitter_addresses) =
+                                &async_pool_changes_filter.emitter_addresses
+                            {
+                                match value.sender {
+                                    massa_ledger_exports::SetOrKeep::Set(addr) => {
+                                        if !emitter_addresses.contains(&addr) {
+                                            return false;
+                                        }
+                                    }
+                                    massa_ledger_exports::SetOrKeep::Keep => {}
+                                }
+                            }
+
+                            if let Some(can_be_executed) = async_pool_changes_filter.can_be_executed
+                            {
+                                match value.can_be_executed {
+                                    massa_ledger_exports::SetOrKeep::Set(can_be_ex) => {
+                                        if can_be_executed != can_be_ex {
+                                            return false;
+                                        }
+                                    }
+                                    massa_ledger_exports::SetOrKeep::Keep => {}
+                                }
+                            }
+                        }
+                        SetUpdateOrDelete::Delete => {}
+                    }
+
+                    true
+                });
+
+            if exec_output.state_changes.async_pool_changes.0.is_empty() {
+                return None;
+            }
         }
     }
+
     if let Some(executed_denounciation_filter) = &filters.executed_denounciation_filter {
         if executed_denounciation_filter.none.is_some() {
             exec_output
@@ -419,11 +620,30 @@ fn filter_map_exec_output(
     if let Some(executed_ops_changes_filter) = &filters.executed_ops_changes_filter {
         if executed_ops_changes_filter.none.is_some() {
             exec_output.state_changes.executed_ops_changes.clear();
+        } else if let Some(operation_ids) = executed_ops_changes_filter.operation_ids.clone() {
+            exec_output
+                .state_changes
+                .executed_ops_changes
+                .retain(|operation_id, _| operation_ids.contains(operation_id));
+
+            if exec_output.state_changes.executed_ops_changes.is_empty() {
+                return None;
+            }
         }
     }
     if let Some(ledger_changes_filter) = &filters.ledger_changes_filter {
         if ledger_changes_filter.none.is_some() {
             exec_output.state_changes.ledger_changes.0.clear();
+        } else if let Some(addresses) = ledger_changes_filter.addresses.clone() {
+            exec_output
+                .state_changes
+                .ledger_changes
+                .0
+                .retain(|address, _| addresses.contains(address));
+
+            if exec_output.state_changes.ledger_changes.0.is_empty() {
+                return None;
+            }
         }
     }
 

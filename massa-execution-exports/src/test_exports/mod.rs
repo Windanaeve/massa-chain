@@ -14,4 +14,7 @@
 //! with an execution worker within tests.
 
 mod config;
+mod tools;
+
 pub use config::*;
+pub use tools::*;

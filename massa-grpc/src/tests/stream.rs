@@ -1,13 +1,24 @@
 // Copyright (c) 2023 MASSA LABS <info@massa.net>
 
 use crate::tests::mock::grpc_public_service;
+use massa_bootstrap::test_exports::{
+    get_dummy_block_id, get_random_async_pool_changes, get_random_executed_de_changes,
+    get_random_executed_ops_changes, get_random_execution_trail_hash_change,
+    get_random_ledger_changes,
+};
 use massa_consensus_exports::MockConsensusController;
-use massa_execution_exports::{ExecutionOutput, MockExecutionController, SlotExecutionOutput};
+use massa_execution_exports::MockExecutionController;
+use massa_execution_exports::{
+    test_exports::get_random_eventstore, ExecutionOutput, SlotExecutionOutput,
+};
+use massa_final_state::StateChanges;
 use massa_models::{
     address::Address, block::FilledBlock, secure_share::SecureShareSerializer, slot::Slot,
     stats::ExecutionStats,
 };
 use massa_pool_exports::MockPoolController;
+use massa_proto_rs::massa::api::v1::{self as grpc_api};
+use massa_proto_rs::massa::model::v1::{self as grpc_model};
 use massa_proto_rs::massa::{
     api::v1::{
         public_service_client::PublicServiceClient, NewBlocksRequest, NewFilledBlocksRequest,
@@ -16,6 +27,7 @@ use massa_proto_rs::massa::{
     },
     model::v1::{Addresses, Slot as ProtoSlot, SlotRange},
 };
+
 use massa_protocol_exports::{
     test_exports::tools::{
         create_block, create_block_with_operations, create_endorsement,
@@ -195,16 +207,14 @@ async fn new_operations() {
         .unwrap()
         .into_inner();
 
-    let filter = massa_proto_rs::massa::api::v1::NewOperationsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_operations_filter::Filter::OperationIds(
-                massa_proto_rs::massa::model::v1::OperationIds {
-                    operation_ids: vec![
-                        "O1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()
-                    ],
-                },
-            ),
-        ),
+    let filter = grpc_api::NewOperationsFilter {
+        filter: Some(grpc_api::new_operations_filter::Filter::OperationIds(
+            grpc_model::OperationIds {
+                operation_ids: vec![
+                    "O1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()
+                ],
+            },
+        )),
     };
 
     // send filter with unknow op id
@@ -223,14 +233,12 @@ async fn new_operations() {
     assert!(result.is_err());
 
     // send filter with known op id
-    let filter_id = massa_proto_rs::massa::api::v1::NewOperationsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_operations_filter::Filter::OperationIds(
-                massa_proto_rs::massa::model::v1::OperationIds {
-                    operation_ids: vec![op.id.to_string()],
-                },
-            ),
-        ),
+    let filter_id = grpc_api::NewOperationsFilter {
+        filter: Some(grpc_api::new_operations_filter::Filter::OperationIds(
+            grpc_model::OperationIds {
+                operation_ids: vec![op.id.to_string()],
+            },
+        )),
     };
 
     tx_request
@@ -254,14 +262,12 @@ async fn new_operations() {
         keypair.get_public_key().to_string()
     );
 
-    let mut filter_type = massa_proto_rs::massa::api::v1::NewOperationsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_operations_filter::Filter::OperationTypes(
-                massa_proto_rs::massa::model::v1::OpTypes {
-                    op_types: vec![massa_proto_rs::massa::model::v1::OpType::CallSc as i32],
-                },
-            ),
-        ),
+    let mut filter_type = grpc_api::NewOperationsFilter {
+        filter: Some(grpc_api::new_operations_filter::Filter::OperationTypes(
+            grpc_model::OpTypes {
+                op_types: vec![grpc_model::OpType::CallSc as i32],
+            },
+        )),
     };
 
     tx_request
@@ -277,14 +283,12 @@ async fn new_operations() {
 
     assert!(result.is_err());
 
-    filter_type = massa_proto_rs::massa::api::v1::NewOperationsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_operations_filter::Filter::OperationTypes(
-                massa_proto_rs::massa::model::v1::OpTypes {
-                    op_types: vec![massa_proto_rs::massa::model::v1::OpType::Transaction as i32],
-                },
-            ),
-        ),
+    filter_type = grpc_api::NewOperationsFilter {
+        filter: Some(grpc_api::new_operations_filter::Filter::OperationTypes(
+            grpc_model::OpTypes {
+                op_types: vec![grpc_model::OpType::Transaction as i32],
+            },
+        )),
     };
 
     tx_request
@@ -324,16 +328,12 @@ async fn new_operations() {
         keypair.get_public_key().to_string()
     );
 
-    let mut filter_addr = massa_proto_rs::massa::api::v1::NewOperationsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_operations_filter::Filter::Addresses(
-                massa_proto_rs::massa::model::v1::Addresses {
-                    addresses: vec![
-                        "AU12BTfZ7k1z6PsLEUZeHYNirz6WJ3NdrWto9H4TkVpkV9xE2TJg2".to_string()
-                    ],
-                },
-            ),
-        ),
+    let mut filter_addr = grpc_api::NewOperationsFilter {
+        filter: Some(grpc_api::new_operations_filter::Filter::Addresses(
+            grpc_model::Addresses {
+                addresses: vec!["AU12BTfZ7k1z6PsLEUZeHYNirz6WJ3NdrWto9H4TkVpkV9xE2TJg2".to_string()],
+            },
+        )),
     };
 
     tx_request
@@ -348,14 +348,12 @@ async fn new_operations() {
     // unknown address
     assert!(result.is_err());
 
-    filter_addr = massa_proto_rs::massa::api::v1::NewOperationsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_operations_filter::Filter::Addresses(
-                massa_proto_rs::massa::model::v1::Addresses {
-                    addresses: vec![address.to_string()],
-                },
-            ),
-        ),
+    filter_addr = grpc_api::NewOperationsFilter {
+        filter: Some(grpc_api::new_operations_filter::Filter::Addresses(
+            grpc_model::Addresses {
+                addresses: vec![address.to_string()],
+            },
+        )),
     };
 
     tx_request
@@ -418,16 +416,14 @@ async fn new_blocks() {
         .unwrap()
         .into_inner();
 
-    let mut filter_slot = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::SlotRange(SlotRange {
-                start_slot: Some(ProtoSlot {
-                    period: 1,
-                    thread: 1,
-                }),
-                end_slot: None,
+    let mut filter_slot = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::SlotRange(SlotRange {
+            start_slot: Some(ProtoSlot {
+                period: 1,
+                thread: 1,
             }),
-        ),
+            end_slot: None,
+        })),
     };
     tx_request
         .send(NewBlocksRequest {
@@ -448,16 +444,14 @@ async fn new_blocks() {
     // assert block is received
     assert!(result.signed_block.is_some());
 
-    filter_slot = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::SlotRange(SlotRange {
-                start_slot: Some(ProtoSlot {
-                    period: 1,
-                    thread: 15,
-                }),
-                end_slot: None,
+    filter_slot = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::SlotRange(SlotRange {
+            start_slot: Some(ProtoSlot {
+                period: 1,
+                thread: 15,
             }),
-        ),
+            end_slot: None,
+        })),
     };
 
     // update filter
@@ -477,16 +471,14 @@ async fn new_blocks() {
     // elapsed, start slot is after block slot
     assert!(result.is_err());
 
-    filter_slot = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::SlotRange(SlotRange {
-                start_slot: None,
-                end_slot: Some(ProtoSlot {
-                    period: 1,
-                    thread: 15,
-                }),
+    filter_slot = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::SlotRange(SlotRange {
+            start_slot: None,
+            end_slot: Some(ProtoSlot {
+                period: 1,
+                thread: 15,
             }),
-        ),
+        })),
     };
 
     tx_request
@@ -509,12 +501,10 @@ async fn new_blocks() {
     // assert block is received
     assert!(result.signed_block.is_some());
 
-    let mut filter_addr = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::Addresses(Addresses {
-                addresses: vec!["AU12BTfZ7k1z6PsLEUZeHYNirz6WJ3NdrWto9H4TkVpkV9xE2TJg2".to_string()],
-            }),
-        ),
+    let mut filter_addr = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::Addresses(Addresses {
+            addresses: vec!["AU12BTfZ7k1z6PsLEUZeHYNirz6WJ3NdrWto9H4TkVpkV9xE2TJg2".to_string()],
+        })),
     };
 
     tx_request
@@ -533,12 +523,10 @@ async fn new_blocks() {
     // elapsed
     assert!(result.is_err());
 
-    filter_addr = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::Addresses(Addresses {
-                addresses: vec![address.to_string()],
-            }),
-        ),
+    filter_addr = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::Addresses(Addresses {
+            addresses: vec![address.to_string()],
+        })),
     };
 
     tx_request
@@ -561,16 +549,12 @@ async fn new_blocks() {
 
     assert!(result.signed_block.is_some());
 
-    let mut filter_ids = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::BlockIds(
-                massa_proto_rs::massa::model::v1::BlockIds {
-                    block_ids: vec![
-                        "B1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()
-                    ],
-                },
-            ),
-        ),
+    let mut filter_ids = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::BlockIds(
+            grpc_model::BlockIds {
+                block_ids: vec!["B1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()],
+            },
+        )),
     };
 
     tx_request
@@ -589,14 +573,12 @@ async fn new_blocks() {
     // elapsed
     assert!(result.is_err());
 
-    filter_ids = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::BlockIds(
-                massa_proto_rs::massa::model::v1::BlockIds {
-                    block_ids: vec![block_op.id.to_string()],
-                },
-            ),
-        ),
+    filter_ids = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::BlockIds(
+            grpc_model::BlockIds {
+                block_ids: vec![block_op.id.to_string()],
+            },
+        )),
     };
 
     tx_request
@@ -619,12 +601,10 @@ async fn new_blocks() {
 
     assert!(result.signed_block.is_some());
 
-    filter_addr = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::Addresses(Addresses {
-                addresses: vec!["massa".to_string()],
-            }),
-        ),
+    filter_addr = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::Addresses(Addresses {
+            addresses: vec!["massa".to_string()],
+        })),
     };
 
     tx_request
@@ -676,20 +656,18 @@ async fn new_endorsements() {
         .unwrap()
         .into_inner();
 
-    let mut filter_ids = massa_proto_rs::massa::api::v1::NewEndorsementsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_endorsements_filter::Filter::EndorsementIds(
-                massa_proto_rs::massa::model::v1::EndorsementIds {
-                    endorsement_ids: vec![
-                        "E1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()
-                    ],
-                },
-            ),
-        ),
+    let mut filter_ids = grpc_api::NewEndorsementsFilter {
+        filter: Some(grpc_api::new_endorsements_filter::Filter::EndorsementIds(
+            grpc_model::EndorsementIds {
+                endorsement_ids: vec![
+                    "E1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()
+                ],
+            },
+        )),
     };
 
     tx_request
-        .send(massa_proto_rs::massa::api::v1::NewEndorsementsRequest {
+        .send(grpc_api::NewEndorsementsRequest {
             filters: vec![filter_ids],
         })
         .await
@@ -702,18 +680,16 @@ async fn new_endorsements() {
     let result = tokio::time::timeout(Duration::from_secs(2), resp_stream.next()).await;
     assert!(result.is_err());
 
-    filter_ids = massa_proto_rs::massa::api::v1::NewEndorsementsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_endorsements_filter::Filter::EndorsementIds(
-                massa_proto_rs::massa::model::v1::EndorsementIds {
-                    endorsement_ids: vec![endorsement.id.to_string()],
-                },
-            ),
-        ),
+    filter_ids = grpc_api::NewEndorsementsFilter {
+        filter: Some(grpc_api::new_endorsements_filter::Filter::EndorsementIds(
+            grpc_model::EndorsementIds {
+                endorsement_ids: vec![endorsement.id.to_string()],
+            },
+        )),
     };
 
     tx_request
-        .send(massa_proto_rs::massa::api::v1::NewEndorsementsRequest {
+        .send(grpc_api::NewEndorsementsRequest {
             filters: vec![filter_ids],
         })
         .await
@@ -731,20 +707,16 @@ async fn new_endorsements() {
 
     assert!(result.signed_endorsement.is_some());
 
-    let mut filter_addr = massa_proto_rs::massa::api::v1::NewEndorsementsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_endorsements_filter::Filter::Addresses(
-                massa_proto_rs::massa::model::v1::Addresses {
-                    addresses: vec![
-                        "AU12BTfZ7k1z6PsLEUZeHYNirz6WJ3NdrWto9H4TkVpkV9xE2TJg2".to_string()
-                    ],
-                },
-            ),
-        ),
+    let mut filter_addr = grpc_api::NewEndorsementsFilter {
+        filter: Some(grpc_api::new_endorsements_filter::Filter::Addresses(
+            grpc_model::Addresses {
+                addresses: vec!["AU12BTfZ7k1z6PsLEUZeHYNirz6WJ3NdrWto9H4TkVpkV9xE2TJg2".to_string()],
+            },
+        )),
     };
 
     tx_request
-        .send(massa_proto_rs::massa::api::v1::NewEndorsementsRequest {
+        .send(grpc_api::NewEndorsementsRequest {
             filters: vec![filter_addr],
         })
         .await
@@ -758,18 +730,16 @@ async fn new_endorsements() {
     // unknown address
     assert!(result.is_err());
 
-    filter_addr = massa_proto_rs::massa::api::v1::NewEndorsementsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_endorsements_filter::Filter::Addresses(
-                massa_proto_rs::massa::model::v1::Addresses {
-                    addresses: vec![endorsement.content_creator_address.to_string()],
-                },
-            ),
-        ),
+    filter_addr = grpc_api::NewEndorsementsFilter {
+        filter: Some(grpc_api::new_endorsements_filter::Filter::Addresses(
+            grpc_model::Addresses {
+                addresses: vec![endorsement.content_creator_address.to_string()],
+            },
+        )),
     };
 
     tx_request
-        .send(massa_proto_rs::massa::api::v1::NewEndorsementsRequest {
+        .send(grpc_api::NewEndorsementsRequest {
             filters: vec![filter_addr],
         })
         .await
@@ -787,20 +757,16 @@ async fn new_endorsements() {
 
     assert!(result.signed_endorsement.is_some());
 
-    let mut filter_block_ids = massa_proto_rs::massa::api::v1::NewEndorsementsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_endorsements_filter::Filter::BlockIds(
-                massa_proto_rs::massa::model::v1::BlockIds {
-                    block_ids: vec![
-                        "B1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()
-                    ],
-                },
-            ),
-        ),
+    let mut filter_block_ids = grpc_api::NewEndorsementsFilter {
+        filter: Some(grpc_api::new_endorsements_filter::Filter::BlockIds(
+            grpc_model::BlockIds {
+                block_ids: vec!["B1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()],
+            },
+        )),
     };
 
     tx_request
-        .send(massa_proto_rs::massa::api::v1::NewEndorsementsRequest {
+        .send(grpc_api::NewEndorsementsRequest {
             filters: vec![filter_block_ids],
         })
         .await
@@ -813,18 +779,16 @@ async fn new_endorsements() {
     let result = tokio::time::timeout(Duration::from_secs(2), resp_stream.next()).await;
     assert!(result.is_err());
 
-    filter_block_ids = massa_proto_rs::massa::api::v1::NewEndorsementsFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_endorsements_filter::Filter::BlockIds(
-                massa_proto_rs::massa::model::v1::BlockIds {
-                    block_ids: vec![endorsement.content.endorsed_block.to_string()],
-                },
-            ),
-        ),
+    filter_block_ids = grpc_api::NewEndorsementsFilter {
+        filter: Some(grpc_api::new_endorsements_filter::Filter::BlockIds(
+            grpc_model::BlockIds {
+                block_ids: vec![endorsement.content.endorsed_block.to_string()],
+            },
+        )),
     };
 
     tx_request
-        .send(massa_proto_rs::massa::api::v1::NewEndorsementsRequest {
+        .send(grpc_api::NewEndorsementsRequest {
             filters: vec![filter_block_ids],
         })
         .await
@@ -881,16 +845,14 @@ async fn new_filled_blocks() {
         .unwrap()
         .into_inner();
 
-    let mut filter = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::SlotRange(SlotRange {
-                start_slot: Some(ProtoSlot {
-                    period: 1,
-                    thread: 0,
-                }),
-                end_slot: None,
+    let mut filter = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::SlotRange(SlotRange {
+            start_slot: Some(ProtoSlot {
+                period: 1,
+                thread: 0,
             }),
-        ),
+            end_slot: None,
+        })),
     };
 
     tx_request
@@ -912,16 +874,14 @@ async fn new_filled_blocks() {
 
     assert!(result.filled_block.is_some());
 
-    filter = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::SlotRange(SlotRange {
-                start_slot: Some(ProtoSlot {
-                    period: 1,
-                    thread: 5,
-                }),
-                end_slot: None,
+    filter = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::SlotRange(SlotRange {
+            start_slot: Some(ProtoSlot {
+                period: 1,
+                thread: 5,
             }),
-        ),
+            end_slot: None,
+        })),
     };
 
     tx_request
@@ -939,16 +899,12 @@ async fn new_filled_blocks() {
     // stat slot is after block slot
     assert!(result.is_err());
 
-    filter = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::BlockIds(
-                massa_proto_rs::massa::model::v1::BlockIds {
-                    block_ids: vec![
-                        "B1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()
-                    ],
-                },
-            ),
-        ),
+    filter = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::BlockIds(
+            grpc_model::BlockIds {
+                block_ids: vec!["B1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string()],
+            },
+        )),
     };
 
     tx_request
@@ -966,14 +922,12 @@ async fn new_filled_blocks() {
     // unknown block id
     assert!(result.is_err());
 
-    filter = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::BlockIds(
-                massa_proto_rs::massa::model::v1::BlockIds {
-                    block_ids: vec![filled_block.header.id.to_string()],
-                },
-            ),
-        ),
+    filter = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::BlockIds(
+            grpc_model::BlockIds {
+                block_ids: vec![filled_block.header.id.to_string()],
+            },
+        )),
     };
 
     tx_request
@@ -995,12 +949,10 @@ async fn new_filled_blocks() {
 
     assert!(result.filled_block.is_some());
 
-    filter = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::Addresses(Addresses {
-                addresses: vec!["AU12BTfZ7k1z6PsLEUZeHYNirz6WJ3NdrWto9H4TkVpkV9xE2TJg2".to_string()],
-            }),
-        ),
+    filter = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::Addresses(Addresses {
+            addresses: vec!["AU12BTfZ7k1z6PsLEUZeHYNirz6WJ3NdrWto9H4TkVpkV9xE2TJg2".to_string()],
+        })),
     };
 
     tx_request
@@ -1018,12 +970,10 @@ async fn new_filled_blocks() {
     // unknown address
     assert!(result.is_err());
 
-    filter = massa_proto_rs::massa::api::v1::NewBlocksFilter {
-        filter: Some(
-            massa_proto_rs::massa::api::v1::new_blocks_filter::Filter::Addresses(Addresses {
-                addresses: vec![address.to_string()],
-            }),
-        ),
+    filter = grpc_api::NewBlocksFilter {
+        filter: Some(grpc_api::new_blocks_filter::Filter::Addresses(Addresses {
+            addresses: vec![address.to_string()],
+        })),
     };
 
     tx_request
@@ -1062,11 +1012,33 @@ async fn new_slot_execution_outputs() {
 
     let stop_handle = public_server.serve(&config).await.unwrap();
 
+    // Given
+    let mut state_changes = StateChanges::default();
+    // Create async pool changes
+    let async_pool_changes = get_random_async_pool_changes(2, config.thread_count);
+    state_changes.async_pool_changes = async_pool_changes.clone();
+    // Create executed denunciations changes
+    let executed_denunciations_changes = get_random_executed_de_changes(2);
+    state_changes.executed_denunciations_changes = executed_denunciations_changes.clone();
+    // Create executed operations changes
+    let executed_ops_changes = get_random_executed_ops_changes(2);
+    state_changes.executed_ops_changes = executed_ops_changes.clone();
+    // Create ledger changes
+    let ledger_changes = get_random_ledger_changes(2);
+    state_changes.ledger_changes = ledger_changes.clone();
+    // Create execution trail hash change
+    let execution_trail_hash_change = get_random_execution_trail_hash_change(true);
+    state_changes.execution_trail_hash_change = execution_trail_hash_change.clone();
+
     let exec_output_1 = ExecutionOutput {
         slot: Slot::new(1, 5),
-        block_info: None,
-        state_changes: massa_final_state::StateChanges::default(),
-        events: Default::default(),
+        block_info: Some(massa_execution_exports::ExecutedBlockInfo {
+            block_id: get_dummy_block_id("toto"),
+            current_version: 1,
+            announced_version: None,
+        }),
+        state_changes,
+        events: get_random_eventstore(2),
     };
 
     let (tx_request, rx) = tokio::sync::mpsc::channel(10);
@@ -1087,17 +1059,15 @@ async fn new_slot_execution_outputs() {
         .unwrap()
         .into_inner();
 
-    let mut filter = massa_proto_rs::massa::api::v1::NewSlotExecutionOutputsFilter {
+    let mut filter = grpc_api::NewSlotExecutionOutputsFilter {
         filter: Some(
-            massa_proto_rs::massa::api::v1::new_slot_execution_outputs_filter::Filter::SlotRange(
-                SlotRange {
-                    start_slot: Some(ProtoSlot {
-                        period: 1,
-                        thread: 0,
-                    }),
-                    end_slot: None,
-                },
-            ),
+            grpc_api::new_slot_execution_outputs_filter::Filter::SlotRange(SlotRange {
+                start_slot: Some(ProtoSlot {
+                    period: 1,
+                    thread: 0,
+                }),
+                end_slot: None,
+            }),
         ),
     };
 
@@ -1121,20 +1091,18 @@ async fn new_slot_execution_outputs() {
 
     assert!(result.output.is_some());
 
-    filter = massa_proto_rs::massa::api::v1::NewSlotExecutionOutputsFilter {
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
         filter: Some(
-            massa_proto_rs::massa::api::v1::new_slot_execution_outputs_filter::Filter::SlotRange(
-                SlotRange {
-                    start_slot: Some(ProtoSlot {
-                        period: 1,
-                        thread: 0,
-                    }),
-                    end_slot: Some(ProtoSlot {
-                        period: 1,
-                        thread: 7,
-                    }),
-                },
-            ),
+            grpc_api::new_slot_execution_outputs_filter::Filter::SlotRange(SlotRange {
+                start_slot: Some(ProtoSlot {
+                    period: 1,
+                    thread: 0,
+                }),
+                end_slot: Some(ProtoSlot {
+                    period: 1,
+                    thread: 7,
+                }),
+            }),
         ),
     };
 
@@ -1158,17 +1126,15 @@ async fn new_slot_execution_outputs() {
     // start slot and end slot are in range
     assert!(result.output.is_some());
 
-    filter = massa_proto_rs::massa::api::v1::NewSlotExecutionOutputsFilter {
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
         filter: Some(
-            massa_proto_rs::massa::api::v1::new_slot_execution_outputs_filter::Filter::SlotRange(
-                SlotRange {
-                    start_slot: Some(ProtoSlot {
-                        period: 1,
-                        thread: 7,
-                    }),
-                    end_slot: None,
-                },
-            ),
+            grpc_api::new_slot_execution_outputs_filter::Filter::SlotRange(SlotRange {
+                start_slot: Some(ProtoSlot {
+                    period: 1,
+                    thread: 7,
+                }),
+                end_slot: None,
+            }),
         ),
     };
 
@@ -1188,15 +1154,13 @@ async fn new_slot_execution_outputs() {
     // start slot is after block slot
     assert!(result.is_err());
 
-    // TODO add test when filter is updated
-
-    /*     filter = massa_proto_rs::massa::api::v1::NewSlotExecutionOutputsFilter {
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
         filter: Some(
-            massa_proto_rs::massa::api::v1::new_slot_execution_outputs_filter::Filter::EventFilter(
-                massa_proto_rs::massa::api::v1::ExecutionEventFilter {
+            grpc_api::new_slot_execution_outputs_filter::Filter::EventFilter(
+                grpc_api::ExecutionEventFilter {
                     filter: Some(
-                        massa_proto_rs::massa::api::v1::execution_event_filter::Filter::OriginalOperationId( "O1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC"
-                                    .to_string()
+                        grpc_api::execution_event_filter::Filter::OriginalOperationId(
+                            "O1q4CBcuYo8YANEV34W4JRWVHrzcYns19VJfyAB7jT4qfitAnMC".to_string(),
                         ),
                     ),
                 },
@@ -1217,8 +1181,162 @@ async fn new_slot_execution_outputs() {
         .unwrap();
 
     let result = tokio::time::timeout(Duration::from_secs(2), resp_stream.next()).await;
-    dbg!(&result);
-    assert!(result.is_err()); */
+    assert!(result.is_err());
+
+    // execution status filter
+    let mut filters = Vec::new();
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
+        filter: Some(grpc_api::new_slot_execution_outputs_filter::Filter::Status(
+            grpc_model::ExecutionOutputStatus::Final as i32,
+        )),
+    };
+    filters.push(filter);
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
+        filter: Some(grpc_api::new_slot_execution_outputs_filter::Filter::Status(
+            grpc_model::ExecutionOutputStatus::Candidate as i32,
+        )),
+    };
+    filters.push(filter);
+    // event filter
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
+        filter: Some(
+            grpc_api::new_slot_execution_outputs_filter::Filter::EventFilter(
+                grpc_api::ExecutionEventFilter {
+                    filter: Some(grpc_api::execution_event_filter::Filter::None(
+                        grpc_model::Empty {},
+                    )),
+                },
+            ),
+        ),
+    };
+    filters.push(filter);
+    // async pool changes filter
+    let can_be_executed = match async_pool_changes.0.iter().next().unwrap().1 {
+        massa_ledger_exports::SetUpdateOrDelete::Set(value) => Some(value.can_be_executed),
+        massa_ledger_exports::SetUpdateOrDelete::Update(value) => match value.can_be_executed {
+            massa_ledger_exports::SetOrKeep::Set(value) => Some(value),
+            massa_ledger_exports::SetOrKeep::Keep => None,
+        },
+        massa_ledger_exports::SetUpdateOrDelete::Delete => None,
+    };
+
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
+        filter: Some(
+            grpc_api::new_slot_execution_outputs_filter::Filter::AsyncPoolChangesFilter(
+                grpc_api::AsyncPoolChangesFilter {
+                    filter: Some(grpc_api::async_pool_changes_filter::Filter::CanBeExecuted(
+                        can_be_executed.unwrap(),
+                    )),
+                },
+            ),
+        ),
+    };
+    filters.push(filter);
+
+    // executed denunciations changes filter
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
+        filter: Some(
+            grpc_api::new_slot_execution_outputs_filter::Filter::ExecutedDenounciationFilter(
+                grpc_api::ExecutedDenounciationFilter {
+                    filter: Some(grpc_api::executed_denounciation_filter::Filter::None(
+                        grpc_model::Empty {},
+                    )),
+                },
+            ),
+        ),
+    };
+    filters.push(filter);
+    let (op_id, (_, _)) = executed_ops_changes.iter().next().unwrap();
+    // executed operations changes filter
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
+        filter: Some(
+            grpc_api::new_slot_execution_outputs_filter::Filter::ExecutedOpsChangesFilter(
+                grpc_api::ExecutedOpsChangesFilter {
+                    filter: Some(grpc_api::executed_ops_changes_filter::Filter::OperationId(
+                        op_id.to_string(),
+                    )),
+                },
+            ),
+        ),
+    };
+    filters.push(filter);
+
+    // ledger changes filter
+    filter = grpc_api::NewSlotExecutionOutputsFilter {
+        filter: Some(
+            grpc_api::new_slot_execution_outputs_filter::Filter::LedgerChangesFilter(
+                grpc_api::LedgerChangesFilter {
+                    filter: Some(grpc_api::ledger_changes_filter::Filter::None(
+                        grpc_model::Empty {},
+                    )),
+                },
+            ),
+        ),
+    };
+    filters.push(filter);
+
+    tx_request
+        .send(NewSlotExecutionOutputsRequest { filters })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    slot_tx
+        .send(SlotExecutionOutput::ExecutedSlot(exec_output_1.clone()))
+        .unwrap();
+
+    let result = tokio::time::timeout(Duration::from_secs(5), resp_stream.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+
+    // complexe filter result
+    assert!(result.output.is_some());
+    assert!(result.output.clone().unwrap().execution_output.is_some());
+    let state_changes = result
+        .output
+        .unwrap()
+        .execution_output
+        .unwrap()
+        .state_changes
+        .unwrap();
+    assert!(state_changes.async_pool_changes.len() == 2);
+    assert!(state_changes.executed_ops_changes.len() == 1);
+    assert!(state_changes.executed_denunciations_changes.is_empty());
+    assert!(state_changes.ledger_changes.is_empty());
+
+    // Too many filters
+    let mut filters = Vec::new();
+    // executed operations changes filter
+    let filter = grpc_api::NewSlotExecutionOutputsFilter {
+        filter: Some(
+            grpc_api::new_slot_execution_outputs_filter::Filter::ExecutedOpsChangesFilter(
+                grpc_api::ExecutedOpsChangesFilter {
+                    filter: Some(grpc_api::executed_ops_changes_filter::Filter::None(
+                        grpc_model::Empty {},
+                    )),
+                },
+            ),
+        ),
+    };
+    for _ in 0..config.max_filters_per_request + 1 {
+        filters.push(filter.clone());
+    }
+
+    tx_request
+        .send(NewSlotExecutionOutputsRequest { filters: filters })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    slot_tx
+        .send(SlotExecutionOutput::ExecutedSlot(exec_output_1.clone()))
+        .unwrap();
+
+    let result = tokio::time::timeout(Duration::from_secs(2), resp_stream.next()).await;
+    // Too many filters
+    assert!(result.unwrap().unwrap().is_err());
 
     stop_handle.stop();
 }
@@ -1285,10 +1403,10 @@ async fn send_operations() {
         .unwrap();
 
     match result.result.unwrap() {
-        massa_proto_rs::massa::api::v1::send_operations_response::Result::OperationIds(_) => {
+        grpc_api::send_operations_response::Result::OperationIds(_) => {
             panic!("should be error");
         }
-        massa_proto_rs::massa::api::v1::send_operations_response::Result::Error(err) => {
+        grpc_api::send_operations_response::Result::Error(err) => {
             assert!(err.message.contains("invalid operation"));
         }
     }
@@ -1311,7 +1429,7 @@ async fn send_operations() {
         .unwrap();
 
     match result.result.unwrap() {
-        massa_proto_rs::massa::api::v1::send_operations_response::Result::Error(err) => {
+        grpc_api::send_operations_response::Result::Error(err) => {
             assert!(err
                 .message
                 .contains("Operation expire_period is lower than the current period of this node"));
@@ -1342,11 +1460,11 @@ async fn send_operations() {
         .unwrap();
 
     match result {
-        massa_proto_rs::massa::api::v1::send_operations_response::Result::OperationIds(ope_id) => {
+        grpc_api::send_operations_response::Result::OperationIds(ope_id) => {
             assert_eq!(ope_id.operation_ids.len(), 1);
             assert_eq!(ope_id.operation_ids[0], op2.id.to_string());
         }
-        massa_proto_rs::massa::api::v1::send_operations_response::Result::Error(_) => {
+        grpc_api::send_operations_response::Result::Error(_) => {
             panic!("should be ok")
         }
     }
@@ -1364,7 +1482,7 @@ async fn send_operations() {
         .unwrap();
 
     match result.result.unwrap() {
-        massa_proto_rs::massa::api::v1::send_operations_response::Result::Error(err) => {
+        grpc_api::send_operations_response::Result::Error(err) => {
             assert_eq!(err.message, "too many operations per message");
         }
         _ => {
@@ -1455,7 +1573,7 @@ async fn send_endorsements() {
         .unwrap();
 
     match result.result.unwrap() {
-        massa_proto_rs::massa::api::v1::send_endorsements_response::Result::Error(err) => {
+        grpc_api::send_endorsements_response::Result::Error(err) => {
             assert!(err.message.contains("failed to deserialize endorsement"))
         }
         _ => panic!("should be error"),
@@ -1515,7 +1633,7 @@ async fn send_blocks() {
     //     .unwrap();
 
     // match result.result.unwrap() {
-    //     massa_proto_rs::massa::api::v1::send_blocks_response::Result::Error(err) => {
+    //     grpc_api::send_blocks_response::Result::Error(err) => {
     //         assert!(err.message.contains("not available"))
     //     }
     //     _ => panic!("should be error"),
