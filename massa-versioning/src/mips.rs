@@ -7,23 +7,20 @@ use massa_time::MassaTime;
 #[allow(unused_imports)]
 use crate::versioning::{MipComponent, MipInfo, MipState};
 
-pub fn get_mip_list() -> [(MipInfo, MipState); 0] {
+pub fn get_mip_list() -> [(MipInfo, MipState); 1] {
     // placeholder
     let mip_list = [
-        /*
         (MipInfo {
-            name: "MIP-0000".to_string(),
-            version: 0,
+            name: "MIP-0005".to_string(),
+            version: 2,
             components: BTreeMap::from([
-                (MipComponent::Address, 0),
-                (MipComponent::KeyPair, 0),
+                (MipComponent::Print, 1),
             ]),
-            start: MassaTime::from_millis(0),
-            timeout: MassaTime::from_millis(0),
-            activation_delay: MassaTime::from_millis(0),
+            start: MassaTime::from_millis(1708425000000), // 10h30 UTC
+            timeout: MassaTime::from_millis(1708439400000), // 14h30 UTC
+            activation_delay: MassaTime::from_millis(600000), // 10 mins
         },
-        MipState::new(MassaTime::from_millis(0)))
-        */
+        MipState::new(MassaTime::from_millis(1708423073000))) // 10h UTC
     ];
 
     // debug!("MIP list: {:?}", mip_list);

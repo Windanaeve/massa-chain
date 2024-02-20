@@ -21,10 +21,11 @@ use massa_executed_ops::ExecutedOps;
 use massa_hash::Hash;
 use massa_ledger_exports::LedgerController;
 use massa_ledger_exports::SetOrKeep;
+use massa_models::config::{GENESIS_TIMESTAMP, T0, THREAD_COUNT};
 use massa_models::operation::OperationId;
 use massa_models::slot::Slot;
 use massa_pos_exports::{PoSFinalState, SelectorController};
-use massa_versioning::versioning::MipStore;
+use massa_versioning::versioning::{MipComponent, MipStore};
 use tracing::{debug, info, warn};
 
 #[cfg(feature = "bootstrap_server")]
@@ -795,6 +796,13 @@ impl FinalStateController for FinalState {
     }
 
     fn finalize(&mut self, slot: Slot, changes: StateChanges) {
+        
+        let time = get_block_slot_timestamp(THREAD_COUNT, T0, *GENESIS_TIMESTAMP, slot).unwrap();
+        let v = self.mip_store
+            .get_latest_component_version_at(&MipComponent::Print, time);
+        if v == 2 {
+            println!("VERSIONING_ACTIVE!");
+        }
         self._finalize(slot, changes).unwrap()
     }
 
