@@ -51,7 +51,7 @@ lazy_static::lazy_static! {
             )
         )
     } else {
-        MassaTime::from_millis(1705312800000) // Monday, January 15, 2024 10:00:00 AM UTC
+        MassaTime::from_millis(1708420500000) // Tuesday, February 20, 2024 09:15:00 AM UTC
     };
 
     /// TESTNET: time when the blockclique is ended.
