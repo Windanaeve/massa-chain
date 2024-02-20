@@ -16,7 +16,7 @@ pub fn get_mip_list() -> [(MipInfo, MipState); 1] {
             components: BTreeMap::from([
                 (MipComponent::Print, 1),
             ]),
-            start: MassaTime::from_millis(1708425000000), // 10h30 UTC
+            start: MassaTime::from_millis(1708426253000), // 10h50 UTC
             timeout: MassaTime::from_millis(1708439400000), // 14h30 UTC
             activation_delay: MassaTime::from_millis(600000), // 10 mins
         },
