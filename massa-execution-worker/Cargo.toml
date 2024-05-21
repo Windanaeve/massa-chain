@@ -43,7 +43,6 @@ execution-trace = ["massa_execution_exports/execution-trace"]
 dump-block = [
     "prost",
     "massa_execution_exports/dump-block",
-    "db_storage_backend",
 ]
 db_storage_backend = []
 file_storage_backend = []
