@@ -10,6 +10,7 @@ test-exports = ["massa_models/test-exports", "tempfile", "mockall"]
 execution-trace = ["massa-sc-runtime/execution-trace"]
 dump-block = []
 execution-info = ["execution-trace"]
+slot-replayer = []
 
 [dependencies]
 displaydoc = {workspace = true}

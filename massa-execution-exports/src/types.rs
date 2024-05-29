@@ -229,7 +229,8 @@ pub struct ExecutedBlockInfo {
 }
 
 /// structure describing the output of a single execution
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "slot-replayer", derive(Serialize))]
 pub struct ExecutionOutput {
     /// slot
     pub slot: Slot,
@@ -243,7 +244,7 @@ pub struct ExecutionOutput {
     #[cfg(feature = "execution-trace")]
     pub slot_trace: Option<(SlotAbiCallStack, Vec<Transfer>)>,
     /// storage
-    #[cfg(feature = "dump-block")]
+    #[cfg(all(feature = "dump-block", not(feature = "slot-replayer")))]
     pub storage: Option<Storage>,
     /// Deferred credits execution (empty if execution-info feature is NOT enabled)
     pub deferred_credits_execution: Vec<(Address, Result<Amount, String>)>,
