@@ -111,7 +111,7 @@ impl LedgerDB {
         let mut batch = DBBatch::new();
 
         for (address, entry) in initial_ledger {
-            self.put_entry(&address, entry, &mut batch);
+            self.put_entry(&address, entry, &mut batch, 0);
         }
 
         self.db.write().write_batch(
@@ -126,14 +126,19 @@ impl LedgerDB {
     /// # Arguments
     /// * changes: ledger changes to be applied
     /// * batch: the batch to apply the changes to
-    pub fn apply_changes_to_batch(&self, changes: LedgerChanges, batch: &mut DBBatch) {
+    pub fn apply_changes_to_batch(
+        &self,
+        changes: LedgerChanges,
+        batch: &mut DBBatch,
+        final_state_component_version: u32,
+    ) {
         // for all incoming changes
         for (addr, change) in changes.0 {
             match change {
                 // the incoming change sets a ledger entry to a new one
                 SetUpdateOrDelete::Set(new_entry) => {
                     // inserts/overwrites the entry with the incoming one
-                    self.put_entry(&addr, new_entry, batch);
+                    self.put_entry(&addr, new_entry, batch, final_state_component_version);
                 }
                 // the incoming change updates an existing ledger entry
                 SetUpdateOrDelete::Update(entry_update) => {
@@ -284,11 +289,22 @@ impl LedgerDB {
     /// * `addr`: associated address
     /// * `ledger_entry`: complete entry to be added
     /// * `batch`: the given operation batch to update
-    fn put_entry(&self, addr: &Address, ledger_entry: LedgerEntry, batch: &mut DBBatch) {
+    fn put_entry(
+        &self,
+        addr: &Address,
+        ledger_entry: LedgerEntry,
+        batch: &mut DBBatch,
+        final_state_component_version: u32,
+    ) {
         let db = self.db.read();
 
-        // Ensures any potential previous entry is fully deleted.
-        delete_datastore_entries(addr, &db, batch);
+        match final_state_component_version {
+            0 => {}
+            _ => {
+                // Ensures any potential previous entry is fully deleted.
+                delete_datastore_entries(addr, &db, batch);
+            }
+        }
 
         // Version
         //TODO: Get version number from parameters
@@ -626,7 +642,7 @@ mod tests {
         let ledger_db = LedgerDB::new(db.clone(), 32, 255, 1000);
         let mut batch = DBBatch::new();
 
-        ledger_db.put_entry(&addr, entry, &mut batch);
+        ledger_db.put_entry(&addr, entry, &mut batch, 0);
         ledger_db.update_entry(&addr, entry_update, &mut batch);
         ledger_db
             .db
